@@ -24,33 +24,30 @@ Param(
     [Parameter(Mandatory = $true, ParameterSetName = "Credential", Position = 2)]
     [PSCredential]$Credential
 )
-$ErrorActionPreference = 'Stop'
-$BaseUri = ${SecretServerUri}.ToString().TrimEnd('/')
 
+$ErrorActionPreference = 'Stop'
+
+$BaseUri = ${SecretServerUri}.ToString().TrimEnd('/')
 Write-Debug "BaseUri: ${BaseUri}"
 
 if ($Credential) {
+    Write-Debug "Dereferencing Username and Password from $Credential"
     $Username = $Credential.Username
-    $CleartextPassword = $Credential.GetNetworkCredential().Password
+    $Password = $Credential.Password
 }
-elseif ($Password) {
-    $CleartextPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password))
-}
-Write-Debug "Username: '${Username}' Password: $($CleartextPassword -replace '(.)', '*')"
+
+Write-Debug "Username: '${Username}' Password: $('*' * $Password.Length)"
 # Call the /oauth2/token endpoint, extract the access_token from the
 # response and use it to create a Bearer token Authorization header
 $headers = @{ 'Authorization' = 'Bearer ' + (
         Invoke-WebRequest -Body (@{
                 'username'   = $Username
-                'password'   = $CleartextPassword
+                'password'   = $Password | ConvertFrom-SecureString -AsPlainText
                 'grant_type' = 'password'
             }
         ) -Method Post -Uri "${BaseUri}/oauth2/token" |
         ConvertFrom-Json).access_token
 }
-Remove-Variable CleartextPassword
-
 $discoveryUri = "${BaseUri}/api/v1/Discovery"
 
 Write-Verbose "Attempting to get Discovery status"
